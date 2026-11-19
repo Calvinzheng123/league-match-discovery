@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 
 from leaguegrid.client import GridClient, GridError
 from leaguegrid.storage import save_json, load_env
-from run import build_series_query, paths_in
+from run import build_series_query, paths_in, validate_state_response
 
 
 class ClientTests(unittest.TestCase):
@@ -65,6 +65,13 @@ class ClientTests(unittest.TestCase):
         paths = paths_in({'games': [{'id': '1', 'clock': None}]})
         self.assertIn('games[].clock [null]', paths)
         self.assertIn('games[].id', paths)
+
+    def test_missing_state_is_distinct_from_explicit_null(self):
+        with self.assertRaisesRegex(GridError, 'omitted seriesState'):
+            validate_state_response({})
+        with self.assertRaisesRegex(GridError, 'explicitly null'):
+            validate_state_response({'seriesState': None})
+        validate_state_response({'seriesState': {'id': '3'}})
 
 
 if __name__ == '__main__':

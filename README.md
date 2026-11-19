@@ -1,21 +1,23 @@
 # League Match Discovery
 
 A noncommercial League of Legends esports search and recommendation project
-using official Riot GRID data. The first milestone audits account access and
-collects small samples. Match search and recommendation follow after the
-available fields and historical coverage are verified.
+using official Riot GRID data. The CLI audits access, ingests completed League
+series into a local DuckDB catalog, searches exact match fields, and ranks an
+inspectable champion/numerical similarity baseline.
 
 ## Quick start
 
-Python 3.10+ and the standard library are sufficient.
+Python 3.10+ is required. The audit commands use the standard library; catalog
+commands and the full test suite also require DuckDB.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-cp .env.example .env
+python -m pip install -r requirements.txt
+# If .env does not exist yet, copy .env.example to .env and set GRID_API_KEY.
 ```
 
-On Windows use `.venv\Scripts\Activate.ps1` and copy `.env.example` to `.env`.
+On Windows use `.venv\Scripts\Activate.ps1`. Keep an existing configured `.env`.
 Set `GRID_API_KEY` inside `.env` locally. The CLI reads that file automatically;
 existing environment variables take precedence. Keep the key private.
 
@@ -29,7 +31,7 @@ python3 run.py schema --api state
 List entitled series for a small window, then inspect a series ID from the output:
 
 ```bash
-python3 run.py series --start 2026-11-01T00:00:00Z --end 2026-11-20T00:00:00Z --pages 1
+python3 run.py series --start 2026-11-01T00:00:00Z --end 2026-11-30T23:59:59.999999Z --pages 20
 python3 run.py state --id YOUR_SERIES_ID
 ```
 
@@ -41,10 +43,11 @@ An empty response establishes neither complete coverage nor a broken key.
 Every successful page is saved before the next request. If interrupted, resume
 using `--after` with the last saved page's `pageInfo.endCursor`.
 
-Inspect the repeating LoL test series separately:
+Inspect a repeating LoL test series separately (ID 71 returned state in the
+November 19 audit; the original starter ID 3 returned an empty data object):
 
 ```bash
-python3 run.py state --id 3
+python3 run.py state --id 71
 ```
 
 Run it again later to collect a second snapshot. Loopfeed repeats a test series;
@@ -59,12 +62,68 @@ python3 run.py fields data/raw/YOUR_RESPONSE_FILE.json
 python3 -m unittest discover -s tests -v
 ```
 
+## Searchable catalog
+
+With the virtual environment active, these commands use the local configured key
+for ingestion. Coverage, search, game inspection and similarity run offline:
+
+```bash
+# Defaults to the full November 2026 window; reuses complete saved discovery.
+python run.py ingest
+python run.py coverage
+
+# Exact, case-sensitive champion/team/tournament names or source IDs.
+python run.py search --champion Rell --team 'Invictus Gaming' --start 2026-11-01 --end 2026-11-30
+python run.py search --tournament 831635 --min-kills 30 --max-duration 2400
+python run.py search --objective slayDragon --min-objectives 5 --limit 5
+
+# Copy a SERIES_ID:GAME_ID key from search; this example is in the audited data.
+python run.py game --id 3012976:66d77ca4-b755-4fee-9170-ff4cc909efec
+python run.py similar --id 3012976:66d77ca4-b755-4fee-9170-ff4cc909efec --limit 3
+python run.py similar --id 3012976:66d77ca4-b755-4fee-9170-ff4cc909efec --champion-weight 0.8 --numeric-weight 0.2
+
+# Reuses completed downloads by default; refresh explicitly requests new state.
+python run.py ingest
+python run.py ingest --refresh
+python -m unittest discover -s tests -v
+```
+
+Every catalog command accepts `--db PATH` (default `data/catalog.duckdb`). Ingestion
+also accepts `--output-dir`, `--discovery PATH` for a complete saved connection,
+and timezone-aware `--start`/`--end` timestamps. Duration bounds mean parsed GRID
+game duration in seconds, kept separate from the game clock. Date bounds use UTC
+calendar dates. Team and champion filters independently match the whole game.
+
+The November 19 ingestion retrieved **12 of 12 selected League esports series**
+and normalized **43 completed, valid games**: 25 Worlds games and 18 LCP P&R games.
+An offline rerun reused all twelve downloads without duplicating rows. **24 tests
+passed**. All 430 player role lists were empty, so positional roles remain unknown.
+Coverage shows table counts, field availability, feature coverage, latest retrieval
+status per series and historical failures. Omitted state, explicit null, unfinished
+state and errors are separate outcomes; successful listing is not successful state
+retrieval. Failed refreshes preserve the prior successful snapshot and provenance.
+
+`leaguegrid/ingest.py` coordinates saved discovery, the existing throttled client,
+atomic raw storage, attempt logging and normalization. `leaguegrid/catalog.py`
+replaces one series transactionally, builds a completed/valid catalog view, and
+implements exact filters and deterministic similarity. All derived data stays in
+ignored local files. Gold measures remain separate; objective labels are never
+summed with their subtypes. Missing counts are not silently zero-filled.
+
+See [CATALOG.md](CATALOG.md) for table keys and source paths, missing-data policy,
+scoring equations and weights, and a reproducible walkthrough from one raw game
+to tables, search and its actual top-ranked similar game. Timeline collection,
+comeback detection, VOD alignment, embeddings and a web interface are later work.
+
 ## Current verification status
 
-The CLI and HTTP behavior are covered by offline tests. Authenticated GRID calls
-have not been run for this repository. The starter queries draw on public GRID
-examples and must be checked against the schema returned for your key. Query
-templates live in `queries/` so field corrections are easy to review. Tokens
+Authenticated Central Data and Series State calls succeeded on November 19, 2026.
+See [ACCESS_AUDIT.md](ACCESS_AUDIT.md) for the November series list, tournament
+and date coverage, confirmed fields, and the unavailable state for Loopfeed 3.
+The series query now supplies `orderDirection: ASC`; the state query includes
+League-specific statistics through inline fragments on the authenticated types.
+Offline tests cover HTTP behavior, query rendering, storage, and missing versus
+explicitly null state. Query templates live in `queries/`. Tokens
 such as `__SERIES_ID__` are safely rendered by `run.py`; these template files are
 not standalone GraphQL requests until rendered. Introspection can be unavailable
 for some deployments; use GRID's authenticated Playground if access is denied.
@@ -83,9 +142,12 @@ never request headers.
 | `run.py` | CLI, query rendering, pagination and response summaries |
 | `leaguegrid/client.py` | Authentication, HTTP, pacing, retries and GraphQL errors |
 | `leaguegrid/storage.py` | Local configuration and atomic JSON writes |
+| `leaguegrid/ingest.py` | Resumable discovery, state downloads and attempt outcomes |
+| `leaguegrid/catalog.py` | DuckDB tables, normalization, search, coverage and similarity |
+| `CATALOG.md` | Keys, relationships, source mappings and baseline equations |
 | `queries/` | Discovery, state and schema query templates |
 | `PROJECT.md` | Planned data model, features and evaluation |
-| `tests/test_client.py` | Offline regression checks |
+| `tests/` | Synthetic offline client, ingestion, normalization and ranking checks |
 | `.github/workflows/tests.yml` | Run tests on pushes and pull requests |
 
 ## Data access and documentation

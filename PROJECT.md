@@ -32,8 +32,10 @@ null, not zero. Preserve retrieval time and any source timestamp or game clock
 as separate fields. Source-specific fields should be documented after inspection.
 
 Start with Python and DuckDB when normalized tables are needed. Add a small
-Streamlit interface after a useful catalog exists. These dependencies are planned,
-not required by this initial access-audit CLI.
+Streamlit interface after a useful catalog exists. DuckDB is now used by the catalog CLI; the web interface remains planned. See
+`CATALOG.md` for the implemented table grains, field mappings and baseline.
+The November 2026 catalog contains 43 completed, valid games from twelve
+successfully retrieved series; it does not include test Loopfeeds.
 
 ## Milestone 3 — Retrieval and recommendation
 

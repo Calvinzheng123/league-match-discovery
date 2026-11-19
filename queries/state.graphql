@@ -1,21 +1,54 @@
 query InspectSeries {
   seriesState(id: __SERIES_ID__) {
     id
+    title { nameShortened }
+    version
     started
     finished
     startedAt
+    updatedAt
+    valid
+    duration
     teams {
       id
+      name
       won
       score
       kills
       deaths
-      players { id kills deaths }
+      players { id name kills deaths killAssistsGiven }
     }
     games {
       id
       sequenceNumber
-      teams { id won kills deaths }
+      started
+      finished
+      valid
+      startedAt
+      duration
+      clock { currentSeconds ticking ticksBackwards type }
+      draftActions { id type sequenceNumber drafter { id type } draftable { id type name } }
+      structures { id type side teamId destroyed currentHealth maxHealth }
+      teams {
+        id name side won kills deaths killAssistsGiven
+        money netWorth loadoutValue
+        objectives { id type completionCount completedFirst }
+        unitKills { id unitName count }
+        ... on GameTeamStateLol {
+          totalMoneyEarned moneyDifference moneyPerMinute damageDealt visionScore
+        }
+        players {
+          id name character { id name } roles { id }
+          kills deaths killAssistsGiven money netWorth loadoutValue
+          unitKills { id unitName count }
+          objectives { id type completionCount completedFirst }
+          ... on GamePlayerStateLol {
+            totalMoneyEarned moneyPerMinute experiencePoints
+            damageDealt damageTaken damagePerMinute
+            kdaRatio killParticipation visionScore visionScorePerMinute
+          }
+        }
+      }
     }
   }
 }

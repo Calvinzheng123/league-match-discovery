@@ -1,11 +1,14 @@
 # Adapt filters only after inspecting your authenticated schema.
 # This lists entitled series in a date window. It does not assume a LoL title filter.
 query DiscoverSeries {
-  allSeries(filter: __FILTER__, first: __FIRST__, after: __AFTER__, orderBy: StartTimeScheduled) {
+  allSeries(filter: __FILTER__, first: __FIRST__, after: __AFTER__, orderBy: StartTimeScheduled, orderDirection: ASC) {
     totalCount
     edges {
       node {
         id
+        title { id name }
+        type
+        productServiceLevels { productName serviceLevel }
         startTimeScheduled
         teams { baseInfo { id name } }
         tournament { id name }
