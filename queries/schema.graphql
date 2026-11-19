@@ -1,0 +1,22 @@
+query InspectSchema {
+  __schema {
+    queryType { name }
+    types {
+      kind
+      name
+      description
+      fields {
+        name
+        description
+        args { name type { ...TypeReference } }
+        type { ...TypeReference }
+      }
+      inputFields { name type { ...TypeReference } }
+      enumValues { name }
+    }
+  }
+}
+fragment TypeReference on __Type {
+  kind name
+  ofType { kind name ofType { kind name ofType { kind name } } }
+}

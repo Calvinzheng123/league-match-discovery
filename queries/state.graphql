@@ -1,0 +1,21 @@
+query InspectSeries {
+  seriesState(id: __SERIES_ID__) {
+    id
+    started
+    finished
+    startedAt
+    teams {
+      id
+      won
+      score
+      kills
+      deaths
+      players { id kills deaths }
+    }
+    games {
+      id
+      sequenceNumber
+      teams { id won kills deaths }
+    }
+  }
+}
